@@ -8,7 +8,7 @@
 #include <mutex>
 #include <string.h>
 
-#if __has_include(<execution>)
+#if __has_include(<execution>) && !defined(_MSC_VER)
 #  include <execution>
 #else
 #  include "tracy_pdqsort.h"
@@ -496,7 +496,7 @@ Worker::Worker( FileRead& f, EventType::Type eventMask )
             std::sort( std::execution::par_unseq, zones.begin(), zones.end(), []( const auto& lhs, const auto& rhs ) { return lhs.zone->start < rhs.zone->start; } );
 #endif
         }
-        std::lock_guard lock( m_data.lock );
+        std::lock_guard<NonRecursiveBenaphore> lock( m_data.lock );
         m_data.sourceLocationZonesReady = true;
     } );
 #endif
@@ -1018,7 +1018,7 @@ void Worker::Exec()
             const char* end = buf + sz;
 
             {
-                std::lock_guard lock( m_data.lock );
+                std::lock_guard<NonRecursiveBenaphore> lock( m_data.lock );
                 while( ptr < end )
                 {
                     auto ev = (const QueueItem*)ptr;
@@ -1036,7 +1036,7 @@ void Worker::Exec()
             enum { MbpsUpdateTime = 200 };
             if( td > MbpsUpdateTime )
             {
-                std::lock_guard lock( m_mbpsData.lock );
+                std::lock_guard<NonRecursiveBenaphore> lock( m_mbpsData.lock );
                 m_mbpsData.mbps.erase( m_mbpsData.mbps.begin() );
                 m_mbpsData.mbps.emplace_back( bytes / ( td * 125.f ) );
                 m_mbpsData.compRatio = float( bytes ) / decBytes;
@@ -2301,7 +2301,7 @@ void Worker::ReconstructMemAllocPlot()
 
     PlotData* plot;
     {
-        std::lock_guard lock( m_data.lock );
+        std::lock_guard<NonRecursiveBenaphore> lock( m_data.lock );
         plot = m_slab.AllocInit<PlotData>();
     }
 
@@ -2383,7 +2383,7 @@ void Worker::ReconstructMemAllocPlot()
     plot->min = 0;
     plot->max = max;
 
-    std::lock_guard lock( m_data.lock );
+    std::lock_guard<NonRecursiveBenaphore> lock( m_data.lock );
     m_data.plots.insert( m_data.plots.begin(), plot );
     m_data.memory.plot = plot;
 }
