@@ -47,6 +47,7 @@ struct UnsupportedVersion : public std::exception
 
 class Worker
 {
+public:
 #pragma pack( 1 )
     struct ZoneThreadData
     {
@@ -55,6 +56,7 @@ class Worker
     };
 #pragma pack()
 
+private:
     struct SourceLocationZones
     {
         SourceLocationZones()
@@ -109,6 +111,9 @@ class Worker
         flat_hash_map<uint64_t, uint16_t, nohash<uint64_t>> threadMap;
         Vector<uint64_t> threadExpand;
         std::pair<uint64_t, uint16_t> threadLast;
+
+        std::vector<Vector<ZoneEvent*>> m_zoneChildren;
+        std::vector<Vector<GpuEvent*>> m_gpuChildren;
     };
 
     struct MbpsBlock
@@ -171,8 +176,8 @@ public:
     // GetZoneEnd() will try to infer the end time by looking at child zones (parent zone can't end
     //     before its children have ended).
     // GetZoneEndDirect() will only return zone's direct timing data, without looking at children.
-    static int64_t GetZoneEnd( const ZoneEvent& ev );
-    static int64_t GetZoneEnd( const GpuEvent& ev );
+    int64_t GetZoneEnd( const ZoneEvent& ev );
+    int64_t GetZoneEnd( const GpuEvent& ev );
     static tracy_force_inline int64_t GetZoneEndDirect( const ZoneEvent& ev ) { return ev.end >= 0 ? ev.end : ev.start; }
     static tracy_force_inline int64_t GetZoneEndDirect( const GpuEvent& ev ) { return ev.gpuEnd >= 0 ? ev.gpuEnd : ev.gpuStart; }
 
@@ -186,6 +191,9 @@ public:
     const char* GetZoneName( const ZoneEvent& ev, const SourceLocation& srcloc ) const;
     const char* GetZoneName( const GpuEvent& ev ) const;
     const char* GetZoneName( const GpuEvent& ev, const SourceLocation& srcloc ) const;
+
+    tracy_force_inline const Vector<ZoneEvent*>& GetZoneChildren( int32_t idx ) const { return m_data.m_zoneChildren[idx]; }
+    tracy_force_inline const Vector<GpuEvent*>& GetGpuChildren( int32_t idx ) const { return m_data.m_gpuChildren[idx]; }
 
     std::vector<int32_t> GetMatchingSourceLocation( const char* query ) const;
 
@@ -292,10 +300,10 @@ private:
     uint16_t CompressThreadReal( uint64_t thread );
     uint16_t CompressThreadNew( uint64_t thread );
 
-    tracy_force_inline void ReadTimeline( FileRead& f, Vector<ZoneEvent*>& vec, uint16_t thread );
-    tracy_force_inline void ReadTimelinePre033( FileRead& f, Vector<ZoneEvent*>& vec, uint16_t thread, int fileVer );
-    tracy_force_inline void ReadTimeline( FileRead& f, Vector<GpuEvent*>& vec );
-    tracy_force_inline void ReadTimelinePre032( FileRead& f, Vector<GpuEvent*>& vec );
+    tracy_force_inline void ReadTimeline( FileRead& f, ZoneEvent* zone, uint16_t thread );
+    tracy_force_inline void ReadTimelinePre033( FileRead& f, ZoneEvent* zone, uint16_t thread, int fileVer );
+    tracy_force_inline void ReadTimeline( FileRead& f, GpuEvent* zone );
+    tracy_force_inline void ReadTimelinePre032( FileRead& f, GpuEvent* zone );
 
     tracy_force_inline void ReadTimelineUpdateStatistics( ZoneEvent* zone, uint16_t thread );
 

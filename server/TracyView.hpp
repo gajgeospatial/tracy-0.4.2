@@ -82,9 +82,10 @@ private:
     void DrawMemory();
     void DrawCompare();
     void DrawCallstackWindow();
+    void DrawMemoryAllocWindow();
 
     template<class T>
-    void ListMemData( T ptr, T end, std::function<const MemEvent*(T&)> DrawAddress, const char* id = nullptr );
+    void ListMemData( T ptr, T end, std::function<void(T&)> DrawAddress, const char* id = nullptr );
 
     void DrawInfoWindow();
     void DrawZoneInfoWindow();
@@ -127,6 +128,8 @@ private:
 
     std::pair<int8_t*, size_t> GetMemoryPages() const;
     const char* GetPlotName( const PlotData* plot ) const;
+
+    void SmallCallstackButton( const char* name, uint32_t callstack, int& idx );
 
     flat_hash_map<const void*, bool, nohash<const void*>> m_visible;
     flat_hash_map<const void*, bool, nohash<const void*>> m_showFull;
@@ -186,6 +189,9 @@ private:
     const GpuEvent* m_gpuHighlight;
     uint64_t m_gpuInfoWindowThread;
     uint32_t m_callstackInfoWindow;
+    int64_t m_memoryAllocInfoWindow;
+    int64_t m_memoryAllocHover;
+    int m_memoryAllocHoverWait;
 
     Region m_highlight;
 
@@ -211,37 +217,45 @@ private:
     Vector<const ZoneEvent*> m_zoneInfoStack;
     Vector<const GpuEvent*> m_gpuInfoStack;
 
-    struct {
+    struct FindZone {
         enum : uint64_t { Unselected = std::numeric_limits<uint64_t>::max() - 1 };
+        enum class GroupBy : int { Thread, UserText, Callstack };
+        enum class SortBy : int { Order, Count, Time };
+
+        struct Group
+        {
+            Vector<ZoneEvent*> zones;
+            int64_t time = 0;
+        };
 
         bool show = false;
         std::vector<int32_t> match;
-        std::map<uint64_t, Vector<ZoneEvent*>> threads;
+        std::map<uint64_t, Group> groups;
         size_t processed;
         int selMatch = 0;
-        uint64_t selThread = Unselected;
+        uint64_t selGroup = Unselected;
         char pattern[1024] = {};
         bool logVal = false;
         bool logTime = true;
         bool cumulateTime = false;
-        bool showThreads = true;
-        bool sortByCounts = false;
+        GroupBy groupBy = GroupBy::Thread;
+        SortBy sortBy = SortBy::Order;
         Region highlight;
         int64_t numBins = -1;
         std::unique_ptr<int64_t[]> bins, binTime, selBin;
 
         void Reset()
         {
-            ResetThreads();
+            ResetGroups();
             match.clear();
             selMatch = 0;
-            selThread = Unselected;
+            selGroup = Unselected;
             highlight.active = false;
         }
 
-        void ResetThreads()
+        void ResetGroups()
         {
-            threads.clear();
+            groups.clear();
             processed = 0;
         }
 
@@ -253,6 +267,8 @@ private:
             strcpy( pattern, name );
         }
     } m_findZone;
+
+    tracy_force_inline uint64_t GetSelectionTarget( const Worker::ZoneThreadData& ev, FindZone::GroupBy groupBy ) const;
 
     struct CompVal
     {

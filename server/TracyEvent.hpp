@@ -84,7 +84,7 @@ struct ZoneEvent
     StringIdx name;
 
     // This must be last. All above is read/saved as-is.
-    Vector<ZoneEvent*> child;
+    int32_t child;
 };
 
 enum { ZoneEventSize = sizeof( ZoneEvent ) };
@@ -137,7 +137,7 @@ struct GpuEvent
     // All above is read/saved as-is.
 
     uint16_t thread;
-    Vector<GpuEvent*> child;
+    int32_t child;
 };
 
 enum { GpuEventSize = sizeof( GpuEvent ) };
