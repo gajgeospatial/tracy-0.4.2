@@ -180,8 +180,7 @@ std::atomic<ThreadNameData*> init_order(104) s_threadNameData( nullptr );
 #endif
 
 #ifdef TRACY_ON_DEMAND
-thread_local uint32_t init_order(104) s_luaZoneCounter( 0 );
-thread_local bool init_order(104) s_luaZoneActive( false );
+thread_local LuaZoneState init_order(104) s_luaZoneState { 0, false };
 #endif
 
 Profiler init_order(105) s_profiler;
@@ -195,6 +194,7 @@ Profiler::Profiler()
     , m_epoch( std::chrono::duration_cast<std::chrono::seconds>( std::chrono::system_clock::now().time_since_epoch() ).count() )
     , m_shutdown( false )
     , m_sock( nullptr )
+    , m_noExit( false )
     , m_stream( LZ4_createStream() )
     , m_buffer( (char*)tracy_malloc( TargetFrameSize*3 ) )
     , m_bufferOffset( 0 )
@@ -220,6 +220,14 @@ Profiler::Profiler()
 
     CalibrateTimer();
     CalibrateDelay();
+
+#ifndef TRACY_NO_EXIT
+    const char* noExitEnv = getenv( "TRACY_NO_EXIT" );
+    if( noExitEnv && noExitEnv[0] == '1' )
+    {
+        m_noExit = true;
+    }
+#endif
 
     s_thread = (Thread*)tracy_malloc( sizeof( Thread ) );
     new(s_thread) Thread( LaunchWorker, this );
@@ -294,7 +302,7 @@ void Profiler::Worker()
         for(;;)
         {
 #ifndef TRACY_NO_EXIT
-            if( ShouldExit() ) return;
+            if( !m_noExit && ShouldExit() ) return;
 #endif
             m_sock = listen.Accept();
             if( m_sock ) break;
@@ -464,7 +472,7 @@ void Profiler::ClearQueues( moodycamel::ConsumerToken& token )
         for( size_t i=0; i<sz; i++ ) FreeAssociatedMemory( m_itemBuf[i] );
     }
 
-    std::lock_guard<NonRecursiveBenaphore> lock( m_serialLock );
+    std::lock_guard<TracyMutex> lock( m_serialLock );
 
     for( auto& v : m_serialDequeue ) FreeAssociatedMemory( v );
     m_serialDequeue.clear();
@@ -528,7 +536,7 @@ Profiler::DequeueStatus Profiler::Dequeue( moodycamel::ConsumerToken& token )
 Profiler::DequeueStatus Profiler::DequeueSerial()
 {
     {
-        std::lock_guard<NonRecursiveBenaphore> lock( m_serialLock );
+        std::lock_guard<TracyMutex> lock( m_serialLock );
         m_serialQueue.swap( m_serialDequeue );
     }
 

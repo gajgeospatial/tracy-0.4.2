@@ -10,10 +10,10 @@
 #include "TracyCallstack.hpp"
 #include "TracyFastVector.hpp"
 #include "../common/tracy_lz4.hpp"
-#include "../common/tracy_benaphore.h"
 #include "../common/TracyQueue.hpp"
 #include "../common/TracyAlign.hpp"
 #include "../common/TracyAlloc.hpp"
+#include "../common/TracyMutex.hpp"
 #include "../common/TracySystem.hpp"
 
 #if defined _MSC_VER || defined __CYGWIN__
@@ -61,6 +61,14 @@ struct VkCtxWrapper
 {
     VkCtx* ptr;
 };
+
+#ifdef TRACY_ON_DEMAND
+struct LuaZoneState
+{
+    uint32_t counter;
+    bool active;
+};
+#endif
 
 using Magic = tracy::moodycamel::ConcurrentQueueDefaultTraits::index_t;
 
@@ -116,7 +124,7 @@ public:
 #endif
     }
 
-    static tracy_force_inline void FrameMark()
+    static tracy_force_inline void SendFrameMark()
     {
 #ifdef TRACY_ON_DEMAND
         s_profiler.m_frameCount.fetch_add( 1, std::memory_order_relaxed );
@@ -393,6 +401,7 @@ private:
     uint64_t m_epoch;
     std::atomic<bool> m_shutdown;
     Socket* m_sock;
+    bool m_noExit;
 
     LZ4_stream_t* m_stream;
     char* m_buffer;
@@ -403,13 +412,13 @@ private:
     char* m_lz4Buf;
 
     FastVector<QueueItem> m_serialQueue, m_serialDequeue;
-    NonRecursiveBenaphore m_serialLock;
+    TracyMutex m_serialLock;
 
 #ifdef TRACY_ON_DEMAND
     std::atomic<bool> m_isConnected;
     std::atomic<uint64_t> m_frameCount;
 
-    NonRecursiveBenaphore m_deferredLock;
+    TracyMutex m_deferredLock;
     FastVector<QueueItem> m_deferredQueue;
 #endif
 };

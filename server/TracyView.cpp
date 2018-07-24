@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "../common/TracyMutex.hpp"
 #include "../common/TracySystem.hpp"
 #include "tracy_pdqsort.h"
 #include "TracyBadVersion.hpp"
@@ -20,6 +21,10 @@
 
 #ifdef TRACY_FILESELECTOR
 #  include "../nfd/nfd.h"
+#endif
+
+#ifndef M_PI_2
+#define M_PI_2 1.57079632679489661923
 #endif
 
 namespace tracy
@@ -360,7 +365,7 @@ bool View::DrawImpl()
         keepOpenPtr = &keepOpen;
     }
 
-    std::lock_guard<NonRecursiveBenaphore> lock( m_worker.GetDataLock() );
+    std::lock_guard<TracyMutex> lock( m_worker.GetDataLock() );
     char tmp[2048];
     sprintf( tmp, "%s###Profiler", m_worker.GetCaptureName().c_str() );
     ImGui::SetNextWindowSize( ImVec2( 1550, 800 ), ImGuiCond_FirstUseEver );
@@ -433,7 +438,7 @@ void View::DrawConnection()
     const auto cs = ty * 0.9f;
 
     {
-        std::lock_guard<NonRecursiveBenaphore> lock( m_worker.GetMbpsDataLock() );
+        std::lock_guard<TracyMutex> lock( m_worker.GetMbpsDataLock() );
         ImGui::Begin( m_worker.GetAddr().c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize );
         const auto& mbpsVector = m_worker.GetMbpsData();
         const auto mbps = mbpsVector.back();
@@ -457,7 +462,7 @@ void View::DrawConnection()
     const auto wpos = ImGui::GetWindowPos() + ImGui::GetWindowContentRegionMin();
     ImGui::GetWindowDrawList()->AddCircleFilled( wpos + ImVec2( 1 + cs * 0.5, 3 + ty * 0.5 ), cs * 0.5, m_worker.IsConnected() ? 0xFF2222CC : 0xFF444444, 10 );
 
-    std::lock_guard<NonRecursiveBenaphore> lock( m_worker.GetDataLock() );
+    std::lock_guard<TracyMutex> lock( m_worker.GetDataLock() );
     {
         const auto sz = m_worker.GetFrameCount();
         if( sz > 1 )
@@ -3492,6 +3497,22 @@ void View::DrawOptions()
         ImGui::TextDisabled( "(%zu)", m_worker.GetPlots().size() );
         if( expand )
         {
+            if( ImGui::SmallButton( "Select all" ) )
+            {
+                for( const auto& p : m_worker.GetPlots() )
+                {
+                    Visible( p ) = true;
+                }
+            }
+            ImGui::SameLine();
+            if( ImGui::SmallButton( "Unselect all" ) )
+            {
+                for( const auto& p : m_worker.GetPlots() )
+                {
+                    Visible( p ) = false;
+                }
+            }
+
             for( const auto& p : m_worker.GetPlots() )
             {
                 ImGui::Checkbox( GetPlotName( p ), &Visible( p ) );
@@ -3506,6 +3527,22 @@ void View::DrawOptions()
     ImGui::TextDisabled( "(%zu)", m_worker.GetThreadData().size() );
     if( expand )
     {
+        if( ImGui::SmallButton( "Select all" ) )
+        {
+            for( const auto& t : m_worker.GetThreadData() )
+            {
+                Visible( t ) = true;
+            }
+        }
+        ImGui::SameLine();
+        if( ImGui::SmallButton( "Unselect all" ) )
+        {
+            for( const auto& t : m_worker.GetThreadData() )
+            {
+                Visible( t ) = false;
+            }
+        }
+
         int idx = 0;
         for( const auto& t : m_worker.GetThreadData() )
         {
