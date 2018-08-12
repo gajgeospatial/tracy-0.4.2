@@ -4,14 +4,12 @@
 //
 // For fast integration, compile and
 // link with this source file (and none
-// other).
+// other) in your executable (or in the
+// main DLL / shared object on multi-DLL
+// projects).
 //
 
 // Define TRACY_ENABLE to enable profiler.
-
-#if ( defined _MSC_VER || defined __CYGWIN__ ) && !defined WIN32_LEAN_AND_MEAN
-#  define WIN32_LEAN_AND_MEAN
-#endif
 
 #include "common/TracySystem.cpp"
 

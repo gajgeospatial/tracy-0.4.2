@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 
+#include "TracyDecayValue.hpp"
 #include "TracyVector.hpp"
 #include "TracyWorker.hpp"
 #include "tracy_flat_hash_map.hpp"
@@ -63,7 +64,8 @@ private:
     bool DrawImpl();
     void DrawConnection();
     void DrawFrames();
-    bool DrawZoneFrames();
+    bool DrawZoneFramesHeader();
+    bool DrawZoneFrames( const FrameData& frames );
     void DrawZones();
     int DispatchZoneLevel( const Vector<ZoneEvent*>& vec, bool hover, double pxns, const ImVec2& wpos, int offset, int depth, float yMin, float yMax );
     int DrawZoneLevel( const Vector<ZoneEvent*>& vec, bool hover, double pxns, const ImVec2& wpos, int offset, int depth, float yMin, float yMax );
@@ -83,6 +85,7 @@ private:
     void DrawCompare();
     void DrawCallstackWindow();
     void DrawMemoryAllocWindow();
+    void DrawInfo();
 
     template<class T>
     void ListMemData( T ptr, T end, std::function<void(T&)> DrawAddress, const char* id = nullptr );
@@ -120,6 +123,7 @@ private:
     uint64_t GetZoneThread( const GpuEvent& zone ) const;
     const GpuCtxData* GetZoneCtx( const GpuEvent& zone ) const;
     const ZoneEvent* FindZoneAtTime( uint64_t thread, int64_t time ) const;
+    const char* GetFrameText( const FrameData& fd, int i, uint64_t ftime, uint64_t offset ) const;
 
 #ifndef TRACY_NO_STATISTICS
     void FindZones();
@@ -183,8 +187,10 @@ private:
 
     const ZoneEvent* m_zoneInfoWindow;
     const ZoneEvent* m_zoneHighlight;
+    DecayValue<uint64_t> m_zoneSrcLocHighlight;
     LockHighlight m_lockHighlight;
-    const MessageData* m_msgHighlight;
+    DecayValue<const MessageData*> m_msgHighlight;
+    const MessageData* m_msgToFocus;
     const GpuEvent* m_gpuInfoWindow;
     const GpuEvent* m_gpuHighlight;
     uint64_t m_gpuInfoWindowThread;
@@ -192,8 +198,10 @@ private:
     int64_t m_memoryAllocInfoWindow;
     int64_t m_memoryAllocHover;
     int m_memoryAllocHoverWait;
+    const FrameData* m_frames;
 
     Region m_highlight;
+    Region m_highlightZoom;
 
     uint64_t m_gpuThread;
     int64_t m_gpuStart;
@@ -202,6 +210,7 @@ private:
     bool m_showOptions;
     bool m_showMessages;
     bool m_showStatistics;
+    bool m_showInfo;
     bool m_drawGpuZones;
     bool m_drawZones;
     bool m_drawLocks;
@@ -279,6 +288,7 @@ private:
     struct {
         bool show = false;
         std::unique_ptr<Worker> second;
+        std::thread loadThread;
         int badVer = 0;
         char pattern[1024] = {};
         std::vector<int32_t> match[2];

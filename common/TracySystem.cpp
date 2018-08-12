@@ -1,3 +1,11 @@
+#if defined _MSC_VER || defined __CYGWIN__ || defined _WIN32
+# ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+# endif
+# ifndef NOMINMAX
+#  define NOMINMAX
+# endif
+#endif
 #ifdef _WIN32
 #  include <windows.h>
 #else
@@ -33,7 +41,7 @@ struct ThreadNameData
     const char* name;
     ThreadNameData* next;
 };
-extern std::atomic<ThreadNameData*> s_threadNameData;
+extern std::atomic<ThreadNameData*>& s_threadNameData;
 #endif
 
 void SetThreadName( std::thread& thread, const char* name )

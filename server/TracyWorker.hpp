@@ -17,6 +17,7 @@
 #include "tracy_flat_hash_map.hpp"
 #include "TracyEvent.hpp"
 #include "TracySlab.hpp"
+#include "TracyStringDiscovery.hpp"
 #include "TracyVarArray.hpp"
 
 namespace tracy
@@ -43,6 +44,28 @@ struct UnsupportedVersion : public std::exception
 {
     UnsupportedVersion( int version ) : version( version ) {}
     int version;
+};
+
+struct LoadProgress
+{
+    enum Stage
+    {
+        Initialization,
+        Locks,
+        Messages,
+        Zones,
+        GpuZones,
+        Plots,
+        Memory,
+        CallStacks
+    };
+
+    LoadProgress() : total( 0 ), progress( 0 ), subTotal( 0 ), subProgress( 0 ) {}
+
+    std::atomic<uint64_t> total;
+    std::atomic<uint64_t> progress;
+    std::atomic<uint64_t> subTotal;
+    std::atomic<uint64_t> subProgress;
 };
 
 class Worker
@@ -78,10 +101,11 @@ private:
         DataBlock() : zonesCnt( 0 ), lastTime( 0 ), frameOffset( 0 ), threadLast( std::numeric_limits<uint64_t>::max(), 0 ) {}
 
         TracyMutex lock;
-        Vector<int64_t> frames;
+        StringDiscovery<FrameData*> frames;
+        FrameData* framesBase;
         Vector<GpuCtxData*> gpuData;
         Vector<MessageData*> messages;
-        Vector<PlotData*> plots;
+        StringDiscovery<PlotData*> plots;
         Vector<ThreadData*> threads;
         MemData memory;
         uint64_t zonesCnt;
@@ -100,6 +124,8 @@ private:
 #ifndef TRACY_NO_STATISTICS
         flat_hash_map<int32_t, SourceLocationZones, nohash<int32_t>> sourceLocationZones;
         bool sourceLocationZonesReady;
+#else
+        flat_hash_map<int32_t, uint64_t> sourceLocationZonesCnt;
 #endif
 
         flat_hash_map<VarArray<uint64_t>*, uint32_t, VarArrayHasherPOT<uint64_t>, VarArrayComparator<uint64_t>> callstackMap;
@@ -152,20 +178,25 @@ public:
     int64_t GetResolution() const { return m_resolution; }
 
     TracyMutex& GetDataLock() { return m_data.lock; }
-    size_t GetFrameCount() const { return m_data.frames.size(); }
+    size_t GetFrameCount( const FrameData& fd ) const { return fd.frames.size(); }
+    int64_t GetTimeBegin() const { return GetFrameBegin( *m_data.framesBase, 0 ); }
     int64_t GetLastTime() const { return m_data.lastTime; }
     uint64_t GetZoneCount() const { return m_data.zonesCnt; }
+    uint64_t GetLockCount() const;
+    uint64_t GetPlotCount() const;
     uint64_t GetFrameOffset() const { return m_data.frameOffset; }
+    const FrameData* GetFramesBase() const { return m_data.framesBase; }
+    const Vector<FrameData*>& GetFrames() const { return m_data.frames.Data(); }
 
-    int64_t GetFrameTime( size_t idx ) const;
-    int64_t GetFrameBegin( size_t idx ) const;
-    int64_t GetFrameEnd( size_t idx ) const;
-    std::pair <int, int> GetFrameRange( int64_t from, int64_t to );
+    int64_t GetFrameTime( const FrameData& fd, size_t idx ) const;
+    int64_t GetFrameBegin( const FrameData& fd, size_t idx ) const;
+    int64_t GetFrameEnd( const FrameData& fd, size_t idx ) const;
+    std::pair <int, int> GetFrameRange( const FrameData& fd, int64_t from, int64_t to );
 
     const std::map<uint32_t, LockMap>& GetLockMap() const { return m_data.lockMap; }
     const Vector<MessageData*>& GetMessages() const { return m_data.messages; }
     const Vector<GpuCtxData*>& GetGpuData() const { return m_data.gpuData; }
-    const Vector<PlotData*>& GetPlots() const { return m_data.plots; }
+    const Vector<PlotData*>& GetPlots() const { return m_data.plots.Data(); }
     const Vector<ThreadData*>& GetThreadData() const { return m_data.threads; }
     const MemData& GetMemData() const { return m_data.memory; }
 
@@ -220,6 +251,9 @@ public:
     void Shutdown() { m_shutdown.store( true, std::memory_order_relaxed ); }
 
     void Write( FileWrite& f );
+    int GetTraceVersion() const { return m_traceVersion; }
+
+    static const LoadProgress& GetLoadProgress() { return s_loadProgress; }
 
 private:
     void Exec();
@@ -232,6 +266,8 @@ private:
     tracy_force_inline void ProcessZoneBeginAllocSrcLoc( const QueueZoneBegin& ev );
     tracy_force_inline void ProcessZoneEnd( const QueueZoneEnd& ev );
     tracy_force_inline void ProcessFrameMark( const QueueFrameMark& ev );
+    tracy_force_inline void ProcessFrameMarkStart( const QueueFrameMark& ev );
+    tracy_force_inline void ProcessFrameMarkEnd( const QueueFrameMark& ev );
     tracy_force_inline void ProcessZoneText( const QueueZoneText& ev );
     tracy_force_inline void ProcessZoneName( const QueueZoneText& ev );
     tracy_force_inline void ProcessLockAnnounce( const QueueLockAnnounce& ev );
@@ -293,6 +329,7 @@ private:
 
     void InsertPlot( PlotData* plot, int64_t time, double val );
     void HandlePlotName( uint64_t name, char* str, size_t sz );
+    void HandleFrameName( uint64_t name, char* str, size_t sz );
 
     void HandlePostponedPlots();
 
@@ -340,10 +377,7 @@ private:
 
     GpuCtxData* m_gpuCtxMap[256];
     flat_hash_map<uint64_t, StringLocation, nohash<uint64_t>> m_pendingCustomStrings;
-    flat_hash_map<uint64_t, PlotData*, nohash<uint64_t>> m_pendingPlots;
     flat_hash_map<uint64_t, uint32_t> m_pendingCallstacks;
-    flat_hash_map<uint64_t, PlotData*, nohash<uint64_t>> m_plotMap;
-    flat_hash_map<const char*, PlotData*, charutil::HasherPOT, charutil::Comparator> m_plotRev;
     flat_hash_map<uint64_t, int32_t, nohash<uint64_t>> m_pendingSourceLocationPayload;
     Vector<uint64_t> m_sourceLocationQueue;
     flat_hash_map<uint64_t, uint32_t, nohash<uint64_t>> m_sourceLocationShrink;
@@ -362,6 +396,10 @@ private:
 
     DataBlock m_data;
     MbpsBlock m_mbpsData;
+
+    int m_traceVersion;
+
+    static LoadProgress s_loadProgress;
 };
 
 }

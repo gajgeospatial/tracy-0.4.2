@@ -85,7 +85,7 @@ static int SetupHwTimerFailed()
     return sigsetjmp( SigIllEnv, 1 );
 }
 
-static void SetupHwTimerSigIllHandler( int signum )
+static void SetupHwTimerSigIllHandler( int /*signum*/ )
 {
     siglongjmp( SigIllEnv, 1 );
 }
@@ -124,6 +124,7 @@ static int64_t SetupHwTimer()
 
 static const char* GetProcessName()
 {
+    const char* processName = "unknown";
 #if defined _MSC_VER
     static char buf[_MAX_PATH];
     GetModuleFileNameA( nullptr, buf, _MAX_PATH );
@@ -131,16 +132,16 @@ static const char* GetProcessName()
     while( *ptr != '\0' ) ptr++;
     while( ptr > buf && *ptr != '\\' && *ptr != '/' ) ptr--;
     if( ptr > buf ) ptr++;
-    return ptr;
+    processName = ptr;
 #elif defined __ANDROID__
 #  if __ANDROID_API__ >= 21
     auto buf = getprogname();
-    if( buf ) return buf;
+    if( buf ) processName = buf;
 #  endif
 #elif defined _GNU_SOURCE || defined __CYGWIN__
-    return program_invocation_short_name;
+    processName = program_invocation_short_name;
 #endif
-    return "unknown";
+    return processName;
 }
 
 enum { QueuePrealloc = 256 * 1024 };
@@ -176,14 +177,63 @@ VkCtxWrapper init_order(104) s_vkCtx { nullptr };
 
 #ifdef TRACY_COLLECT_THREAD_NAMES
 struct ThreadNameData;
-std::atomic<ThreadNameData*> init_order(104) s_threadNameData( nullptr );
+static std::atomic<ThreadNameData*> init_order(104) s_threadNameDataInstance( nullptr );
+std::atomic<ThreadNameData*>& s_threadNameData = s_threadNameDataInstance;
 #endif
 
 #ifdef TRACY_ON_DEMAND
 thread_local LuaZoneState init_order(104) s_luaZoneState { 0, false };
 #endif
 
-Profiler init_order(105) s_profiler;
+static Profiler init_order(105) s_profilerInstance;
+Profiler& s_profiler = s_profilerInstance;
+
+#ifdef _MSC_VER
+#  define DLL_EXPORT __declspec(dllexport)
+#else
+#  define DLL_EXPORT __attribute__((visibility("default")))
+#endif
+
+// DLL exports to enable TracyClientDLL.cpp to retrieve the instances of Tracy objects and functions
+
+DLL_EXPORT moodycamel::ConcurrentQueue<QueueItem>::ExplicitProducer* get_token()
+{
+    return s_token.ptr;
+}
+
+DLL_EXPORT void*(*get_rpmalloc())(size_t size)
+{
+    return rpmalloc;
+}
+
+DLL_EXPORT void(*get_rpfree())(void* ptr)
+{
+    return rpfree;
+}
+
+#if defined TRACY_HW_TIMER && __ARM_ARCH >= 6
+DLL_EXPORT int64_t(*get_GetTimeImpl())()
+{
+    return GetTimeImpl;
+}
+#endif
+
+DLL_EXPORT Profiler& get_profiler()
+{
+    return s_profiler;
+}
+
+#ifdef TRACY_COLLECT_THREAD_NAMES
+DLL_EXPORT std::atomic<ThreadNameData*>& get_threadNameData()
+{
+    return s_threadNameData;
+}
+
+DLL_EXPORT void(*get_rpmalloc_thread_initialize())()
+{
+    return rpmalloc_thread_initialize;
+}
+#endif
 
 
 enum { BulkSize = TargetFrameSize / QueueItemSize };
@@ -610,7 +660,7 @@ bool Profiler::SendData( const char* data, size_t len )
 
 void Profiler::SendString( uint64_t str, const char* ptr, QueueType type )
 {
-    assert( type == QueueType::StringData || type == QueueType::ThreadName || type == QueueType::CustomStringData || type == QueueType::PlotName );
+    assert( type == QueueType::StringData || type == QueueType::ThreadName || type == QueueType::CustomStringData || type == QueueType::PlotName || type == QueueType::FrameName );
 
     QueueItem item;
     MemWrite( &item.hdr.type, type );
@@ -629,7 +679,7 @@ void Profiler::SendString( uint64_t str, const char* ptr, QueueType type )
 
 void Profiler::SendSourceLocation( uint64_t ptr )
 {
-    auto srcloc = (const SourceLocation*)ptr;
+    auto srcloc = (const SourceLocationData*)ptr;
     QueueItem item;
     MemWrite( &item.hdr.type, QueueType::SourceLocation );
     MemWrite( &item.srcloc.name, (uint64_t)srcloc->name );
@@ -679,7 +729,7 @@ void Profiler::SendCallstackPayload( uint64_t _ptr )
     AppendDataUnsafe( &item, QueueDataSize[(int)QueueType::CallstackPayload] );
     AppendDataUnsafe( &l16, sizeof( l16 ) );
 
-    if( sizeof( uintptr_t ) == sizeof( uint64_t ) )
+    if( compile_time_condition<sizeof( uintptr_t ) == sizeof( uint64_t )>::value )
     {
         AppendDataUnsafe( ptr, sizeof( uint64_t ) * sz );
     }
@@ -756,6 +806,9 @@ bool Profiler::HandleServerQuery()
     case ServerQueryCallstackFrame:
         SendCallstackFrame( ptr );
         break;
+    case ServerQueryFrameName:
+        SendString( ptr, (const char*)ptr, QueueType::FrameName );
+        break;
     default:
         assert( false );
         break;
@@ -797,7 +850,7 @@ void Profiler::CalibrateTimer()
 class FakeZone
 {
 public:
-    FakeZone( const SourceLocation* srcloc ) : m_id( (uint64_t)srcloc ) {}
+    FakeZone( const SourceLocationData* srcloc ) : m_id( (uint64_t)srcloc ) {}
     ~FakeZone() {}
 
 private:
@@ -814,7 +867,7 @@ void Profiler::CalibrateDelay()
     moodycamel::ConcurrentQueue<QueueItem>::ExplicitProducer* ptoken = s_queue.get_explicit_producer( ptoken_detail );
     for( int i=0; i<Iterations; i++ )
     {
-        static const tracy::SourceLocation __tracy_source_location { nullptr, __FUNCTION__,  __FILE__, (uint32_t)__LINE__, 0 };
+        static const tracy::SourceLocationData __tracy_source_location { nullptr, __FUNCTION__,  __FILE__, (uint32_t)__LINE__, 0 };
         {
             Magic magic;
             auto& tail = ptoken->get_tail_index();
@@ -850,13 +903,13 @@ void Profiler::CalibrateDelay()
     const auto f0 = GetTime();
     for( int i=0; i<Iterations; i++ )
     {
-        static const tracy::SourceLocation __tracy_source_location { nullptr, __FUNCTION__,  __FILE__, (uint32_t)__LINE__, 0 };
+        static const tracy::SourceLocationData __tracy_source_location { nullptr, __FUNCTION__,  __FILE__, (uint32_t)__LINE__, 0 };
         FakeZone ___tracy_scoped_zone( &__tracy_source_location );
     }
     const auto t0 = GetTime();
     for( int i=0; i<Iterations; i++ )
     {
-        static const tracy::SourceLocation __tracy_source_location { nullptr, __FUNCTION__,  __FILE__, (uint32_t)__LINE__, 0 };
+        static const tracy::SourceLocationData __tracy_source_location { nullptr, __FUNCTION__,  __FILE__, (uint32_t)__LINE__, 0 };
         {
             Magic magic;
             auto& tail = ptoken->get_tail_index();

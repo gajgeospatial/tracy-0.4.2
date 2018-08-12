@@ -1,6 +1,7 @@
 #ifndef __TRACYPROFILER_HPP__
 #define __TRACYPROFILER_HPP__
 
+#include <assert.h>
 #include <atomic>
 #include <chrono>
 #include <stdint.h>
@@ -29,12 +30,15 @@
 #  endif
 #endif
 
+#define TracyConcat(x,y) TracyConcatIndirect(x,y)
+#define TracyConcatIndirect(x,y) x##y
+
 namespace tracy
 {
 
 class Socket;
 
-struct SourceLocation
+struct SourceLocationData
 {
     const char* name;
     const char* function;
@@ -77,7 +81,7 @@ extern int64_t (*GetTimeImpl)();
 #endif
 
 class Profiler;
-extern Profiler s_profiler;
+extern Profiler& s_profiler;
 
 class Profiler
 {
@@ -136,6 +140,23 @@ public:
         auto item = token->enqueue_begin<tracy::moodycamel::CanAlloc>( magic );
         MemWrite( &item->hdr.type, QueueType::FrameMarkMsg );
         MemWrite( &item->frameMark.time, GetTime() );
+        MemWrite( &item->frameMark.name, uint64_t( 0 ) );
+        tail.store( magic + 1, std::memory_order_release );
+    }
+
+    static tracy_force_inline void SendFrameMark( const char* name, QueueType type )
+    {
+        assert( type == QueueType::FrameMarkMsg || type == QueueType::FrameMarkMsgStart || type == QueueType::FrameMarkMsgEnd );
+#ifdef TRACY_ON_DEMAND
+        if( !s_profiler.IsConnected() ) return;
+#endif
+        Magic magic;
+        auto& token = s_token.ptr;
+        auto& tail = token->get_tail_index();
+        auto item = token->enqueue_begin<tracy::moodycamel::CanAlloc>( magic );
+        MemWrite( &item->hdr.type, type );
+        MemWrite( &item->frameMark.time, GetTime() );
+        MemWrite( &item->frameMark.name, uint64_t( name ) );
         tail.store( magic + 1, std::memory_order_release );
     }
 
@@ -370,7 +391,7 @@ private:
         MemWrite( &item->memAlloc.time, GetTime() );
         MemWrite( &item->memAlloc.thread, thread );
         MemWrite( &item->memAlloc.ptr, (uint64_t)ptr );
-        if( sizeof( size ) == 4 )
+        if( compile_time_condition<sizeof( size ) == 4>::value )
         {
             memcpy( &item->memAlloc.size, &size, 4 );
             memset( &item->memAlloc.size + 4, 0, 2 );

@@ -48,7 +48,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>TRACY_FILESELECTOR;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;WIN32_LEAN_AND_MEAN;NOMINMAX;_USE_MATH_DEFINES;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>TRACY_FILESELECTOR;TRACY_EXTENDED_FONT;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;WIN32_LEAN_AND_MEAN;NOMINMAX;_USE_MATH_DEFINES;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\libs\glfw\include;..\..\libs\gl3w;..\..\..\imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
@@ -73,7 +73,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>TRACY_FILESELECTOR;NDEBUG;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;WIN32_LEAN_AND_MEAN;NOMINMAX;_USE_MATH_DEFINES;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>TRACY_FILESELECTOR;TRACY_EXTENDED_FONT;NDEBUG;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;WIN32_LEAN_AND_MEAN;NOMINMAX;_USE_MATH_DEFINES;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\..\libs\glfw\include;..\..\libs\gl3w;..\..\..\imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ConformanceMode>true</ConformanceMode>
@@ -131,6 +131,7 @@
     <ClInclude Include="..\..\..\nfd\nfd_common.h" />
     <ClInclude Include="..\..\..\server\TracyBadVersion.hpp" />
     <ClInclude Include="..\..\..\server\TracyCharUtil.hpp" />
+    <ClInclude Include="..\..\..\server\TracyDecayValue.hpp" />
     <ClInclude Include="..\..\..\server\TracyEvent.hpp" />
     <ClInclude Include="..\..\..\server\TracyFileHeader.hpp" />
     <ClInclude Include="..\..\..\server\TracyFileRead.hpp" />
@@ -139,14 +140,17 @@
     <ClInclude Include="..\..\..\server\TracyMemory.hpp" />
     <ClInclude Include="..\..\..\server\TracyPopcnt.hpp" />
     <ClInclude Include="..\..\..\server\TracySlab.hpp" />
+    <ClInclude Include="..\..\..\server\TracyStringDiscovery.hpp" />
     <ClInclude Include="..\..\..\server\TracyVarArray.hpp" />
     <ClInclude Include="..\..\..\server\TracyVector.hpp" />
+    <ClInclude Include="..\..\..\server\TracyVersion.hpp" />
     <ClInclude Include="..\..\..\server\TracyView.hpp" />
     <ClInclude Include="..\..\..\server\TracyWorker.hpp" />
     <ClInclude Include="..\..\..\server\tracy_flat_hash_map.hpp" />
     <ClInclude Include="..\..\..\server\tracy_pdqsort.h" />
     <ClInclude Include="..\..\libs\gl3w\GL\gl3w.h" />
     <ClInclude Include="..\..\libs\gl3w\GL\glcorearb.h" />
+    <ClInclude Include="..\..\src\Arimo.hpp" />
     <ClInclude Include="..\..\src\imgui_impl_glfw_gl3.h" />
   </ItemGroup>
   <ItemGroup>
