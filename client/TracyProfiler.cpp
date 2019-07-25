@@ -57,7 +57,8 @@
 #include "../TracyC.h"
 
 #ifdef __APPLE__
-#  define TRACY_DELAYED_INIT
+#  define TRACY_USE_INIT_ONCE
+#  define init_order(x)
 #else
 #  ifdef __GNUC__
 #    define init_order( val ) __attribute__ ((init_priority(val)))
@@ -113,6 +114,11 @@ namespace
 
     INIT_ONCE InitOnce = INIT_ONCE_STATIC_INIT;
 }
+#    elif defined __APPLE__
+namespace
+{
+    std::once_flag onceFlag;
+}
 #    elif defined __linux__
 namespace
 {
@@ -133,6 +139,8 @@ struct RPMallocInit
 #  if defined TRACY_USE_INIT_ONCE
 #    if defined _WIN32 || defined __CYGWIN__
         InitOnceExecuteOnce( &InitOnce, InitOnceCallback, nullptr, nullptr );
+#    elif defined __APPLE__
+        std::call_once( onceFlag, []() { rpmalloc_initialize(); } );
 #    elif defined __linux__
         pthread_once( &once_control, InitOnceCallback );
 #    endif
@@ -152,7 +160,9 @@ struct RPMallocThreadInit
 #  if defined TRACY_USE_INIT_ONCE
 #    if defined _WIN32 || defined __CYGWIN__
         InitOnceExecuteOnce( &InitOnce, InitOnceCallback, nullptr, nullptr );
-#    else
+#    elif defined __APPLE__
+        std::call_once( onceFlag, []() { rpmalloc_initialize(); } );
+#    elif defined __linux__
         pthread_once( &once_control, InitOnceCallback );
 #    endif
 #  endif //if defined TRACY_USE_INIT_ONCE
