@@ -1,6 +1,7 @@
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27428.2011
+VisualStudioVersion = 15.0.26730.15
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Tracy", "Tracy.vcxproj", "{1C736F84-08DF-4A7A-A7FB-7BA3412B8C97}"
 EndProject
@@ -8,18 +9,12 @@ Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Release|x64 = Release|x64
-		vs2017_Debug|x64 = vs2017_Debug|x64
-		vs2017_Release|x64 = vs2017_Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{1C736F84-08DF-4A7A-A7FB-7BA3412B8C97}.Debug|x64.ActiveCfg = Debug|x64
 		{1C736F84-08DF-4A7A-A7FB-7BA3412B8C97}.Debug|x64.Build.0 = Debug|x64
 		{1C736F84-08DF-4A7A-A7FB-7BA3412B8C97}.Release|x64.ActiveCfg = Release|x64
 		{1C736F84-08DF-4A7A-A7FB-7BA3412B8C97}.Release|x64.Build.0 = Release|x64
-		{1C736F84-08DF-4A7A-A7FB-7BA3412B8C97}.vs2017_Debug|x64.ActiveCfg = vs2017_Debug|x64
-		{1C736F84-08DF-4A7A-A7FB-7BA3412B8C97}.vs2017_Debug|x64.Build.0 = vs2017_Debug|x64
-		{1C736F84-08DF-4A7A-A7FB-7BA3412B8C97}.vs2017_Release|x64.ActiveCfg = vs2017_Release|x64
-		{1C736F84-08DF-4A7A-A7FB-7BA3412B8C97}.vs2017_Release|x64.Build.0 = vs2017_Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
